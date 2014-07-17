@@ -2,14 +2,19 @@ package image_resizer
 
 import (
 	"appengine"
+	"appengine/memcache"
 	"appengine/urlfetch"
+	"bytes"
 	"github.com/nfnt/resize"
 	"image"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"io/ioutil"
 	"net/http"
 	"strconv"
+
+	"blobcache"
 )
 
 func init() {
@@ -126,6 +131,16 @@ func getImageDimension(c appengine.Context, r *http.Request, dimension string) i
 }
 
 func loadImage(c appengine.Context, imageUrl string) (img image.Image, format string) {
+	item, err := blobcache.Get(c, imageUrl)
+	if err == nil {
+		if img, format, err = image.Decode(bytes.NewReader(item.Value)); err != nil {
+			c.Errorf("Cannot parse image with imageUrl=%v obtained from memcache: %v. Fetching the image again from imageUrl", imageUrl, err)
+			// return skipped intentionally
+		} else {
+			return
+		}
+	}
+
 	client := urlfetch.Client(c)
 	resp, err := client.Get(imageUrl)
 	if err != nil {
@@ -137,9 +152,21 @@ func loadImage(c appengine.Context, imageUrl string) (img image.Image, format st
 		c.Errorf("Unexpected StatusCode=%d returned from imageUrl=%v", resp.StatusCode, imageUrl)
 		return
 	}
-	if img, format, err = image.Decode(resp.Body); err != nil {
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		c.Errorf("Error when reading image body from imageUrl=%v: %v", imageUrl, err)
+		return
+	}
+	if img, format, err = image.Decode(bytes.NewReader(body)); err != nil {
 		c.Errorf("Cannot parse image from imageUrl=%v: %v", imageUrl, err)
 		return
 	}
+
+	item = &memcache.Item{
+		Key: imageUrl,
+		Value: body,
+	}
+	blobcache.Set(c, item)
+
 	return img, format
 }
