@@ -163,7 +163,7 @@ func loadImage(c appengine.Context, imageUrl string) (img image.Image, format st
 	}
 
 	item = &memcache.Item{
-		Key: imageUrl,
+		Key:   imageUrl,
 		Value: body,
 	}
 	blobcache.Set(c, item)
