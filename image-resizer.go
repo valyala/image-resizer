@@ -10,11 +10,17 @@ import (
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"strconv"
 
 	"blobcache"
+)
+
+const (
+	// The maximum image size, which can be loaded from imageUrl
+	MAX_IMAGE_SIZE = 10 * 1024 * 1024
 )
 
 func init() {
@@ -172,7 +178,7 @@ func getImageBlob(c appengine.Context, imageUrl string) []byte {
 		c.Errorf("Unexpected StatusCode=%d returned from imageUrl=%v", resp.StatusCode, imageUrl)
 		return nil
 	}
-	blob, err := ioutil.ReadAll(resp.Body)
+	blob, err := ioutil.ReadAll(io.LimitReader(resp.Body, MAX_IMAGE_SIZE))
 	if err != nil {
 		c.Errorf("Error when reading image body from imageUrl=%v: %v", imageUrl, err)
 		return nil
