@@ -141,32 +141,41 @@ func loadImage(c appengine.Context, imageUrl string) (img image.Image, format st
 		}
 	}
 
-	client := urlfetch.Client(c)
-	resp, err := client.Get(imageUrl)
-	if err != nil {
-		c.Errorf("Cannot load image from imageUrl=%v: %v", imageUrl, err)
+	blob := getImageBlob(c, imageUrl)
+	if blob == nil {
 		return
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		c.Errorf("Unexpected StatusCode=%d returned from imageUrl=%v", resp.StatusCode, imageUrl)
-		return
-	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		c.Errorf("Error when reading image body from imageUrl=%v: %v", imageUrl, err)
-		return
-	}
-	if img, format, err = image.Decode(bytes.NewReader(body)); err != nil {
+
+	if img, format, err = image.Decode(bytes.NewReader(blob)); err != nil {
 		c.Errorf("Cannot parse image from imageUrl=%v: %v", imageUrl, err)
 		return
 	}
 
 	item = &memcache.Item{
 		Key:   imageUrl,
-		Value: body,
+		Value: blob,
 	}
 	blobcache.Set(c, item)
 
 	return img, format
+}
+
+func getImageBlob(c appengine.Context, imageUrl string) []byte {
+	client := urlfetch.Client(c)
+	resp, err := client.Get(imageUrl)
+	if err != nil {
+		c.Errorf("Cannot load image from imageUrl=%v: %v", imageUrl, err)
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		c.Errorf("Unexpected StatusCode=%d returned from imageUrl=%v", resp.StatusCode, imageUrl)
+		return nil
+	}
+	blob, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		c.Errorf("Error when reading image body from imageUrl=%v: %v", imageUrl, err)
+		return nil
+	}
+	return blob
 }
